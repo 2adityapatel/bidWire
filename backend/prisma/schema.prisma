@@ -1,0 +1,45 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ListingStatus {
+  active
+  closed
+}
+
+model Listing {
+  id                      String        @id @default(uuid())
+  title                   String
+  description             String
+  startingPrice           Int           // in paise (1 INR = 100 paise)
+  currentHighestBid       Int?          // in paise, null if no bids yet
+  currentHighestBidderName String?
+  endsAt                  DateTime
+  status                  ListingStatus @default(active)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  bids                    Bid[]
+
+  @@map("listings")
+}
+
+model Bid {
+  id          String   @id @default(uuid())
+  listingId   String
+  bidderName  String
+  amount      Int      // in paise
+  createdAt   DateTime @default(now())
+
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("bids")
+}

@@ -1,0 +1,35 @@
+# ── Node ────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Build outputs ────────────────────────
+dist/
+build/
+
+# ── Environment variables ────────────────
+.env
+# Allow example files
+!.env.example
+
+# ── Prisma generated client ──────────────
+backend/src/generated/
+
+# ── Vite ────────────────────────────────
+frontend/dist/
+
+# ── OS files ────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor ──────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── Docker volumes ───────────────────────
+postgres_data/
