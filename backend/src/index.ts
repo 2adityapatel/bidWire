@@ -76,3 +76,8 @@ process.on("SIGTERM", async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
+
+/*
+SIGTERM: A termination signal sent by hosting services (like Docker, Render, or AWS) when shutting down or restarting the server.
+Disconnects Prisma cleanly from the database before exiting to prevent leaked open database connections.
+*/
