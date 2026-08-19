@@ -1,6 +1,7 @@
 import type { Server, Socket } from "socket.io";
 import { prisma } from "../db/prisma.js";
 import { placeBid } from "../services/bidService.js";
+import { redisClient } from "../redis/redis.js";
 
 interface JoinListingPayload {
   listingId: string;
@@ -13,11 +14,19 @@ interface PlaceBidPayload {
 }
 
 /**
- * Returns the live presence count for a listing from joined socket rooms.
+ * Redis key for the presence set of a listing.
+ * Each member is a socketId. SCARD gives the cross-instance viewer count.
  */
-function getPresenceCount(io: Server, listingId: string): number {
-  const room = io.sockets.adapter.rooms.get(`listing:${listingId}`);
-  return room ? room.size : 0;
+function presenceKey(listingId: string): string {
+  return `presence:${listingId}`;
+}
+
+/**
+ * Returns the live presence count for a listing from Redis.
+ * Uses SCARD on a Redis Set so it includes viewers on ALL instances.
+ */
+async function getPresenceCount(listingId: string): Promise<number> {
+  return redisClient.scard(presenceKey(listingId));
 }
 
 export function registerSocketHandlers(io: Server, socket: Socket) {
@@ -32,6 +41,11 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
     // Join the socket.io room for this listing
     await socket.join(room);
+
+    // Track presence in Redis — SADD is idempotent so reconnects are safe.
+    // Refresh the TTL on every join so the key doesn't expire while viewers are active.
+    await redisClient.sadd(presenceKey(listingId), socket.id);
+    await redisClient.expire(presenceKey(listingId), 3600); // 1-hour TTL as safety net
 
     try {
       // Fetch fresh state from DB (handles reconnect re-sync automatically)
@@ -50,8 +64,8 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
       // Send current state to the reconnecting/joining client
       socket.emit("listing_state", { listing });
 
-      // Broadcast updated presence count to everyone in the room
-      const count = getPresenceCount(io, listingId);
+      // Broadcast updated presence count to everyone in the room (all instances)
+      const count = await getPresenceCount(listingId);
       io.to(room).emit("presence_update", { listingId, count });
 
       console.log(`👤 ${displayName} joined listing:${listingId} (${count} watching)`);
@@ -68,7 +82,10 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
     await socket.leave(room);
 
-    const count = getPresenceCount(io, listingId);
+    // Remove from Redis presence set
+    await redisClient.srem(presenceKey(listingId), socket.id);
+
+    const count = await getPresenceCount(listingId);
     io.to(room).emit("presence_update", { listingId, count });
 
     console.log(`👋 ${displayName} left listing:${listingId} (${count} watching)`);
@@ -90,7 +107,8 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
       return;
     }
 
-    // Broadcast the new highest bid to everyone in the room (including sender)
+    // Broadcast the new highest bid to everyone in the room across ALL instances.
+    // The Redis adapter picks this up and fans it out to backend_1 AND backend_2.
     io.to(`listing:${listingId}`).emit("bid_update", {
       listingId,
       newHighestBid: result.currentHighestBid,
@@ -104,16 +122,25 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
   });
 
   // ── disconnect ────────────────────────────────────────────────────────────
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
     console.log(`❌ Socket disconnected: ${socket.id} (${displayName})`);
 
-    // Update presence for all rooms this socket was in
+    // Update presence in Redis and broadcast updated count for all rooms this socket was in.
+    // socket.rooms still contains the rooms at disconnect time.
+    const cleanupPromises: Promise<void>[] = [];
+
     socket.rooms.forEach((room) => {
       if (room.startsWith("listing:")) {
         const listingId = room.replace("listing:", "");
-        const count = getPresenceCount(io, listingId);
-        io.to(room).emit("presence_update", { listingId, count });
+        const cleanup = async () => {
+          await redisClient.srem(presenceKey(listingId), socket.id);
+          const count = await getPresenceCount(listingId);
+          io.to(room).emit("presence_update", { listingId, count });
+        };
+        cleanupPromises.push(cleanup());
       }
     });
+
+    await Promise.all(cleanupPromises);
   });
 }

@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Generate Prisma client
+# Generate Prisma client (with linux-musl-openssl-3.0.x binary target)
 COPY prisma ./prisma
 RUN npx prisma generate
 
@@ -17,6 +17,9 @@ RUN npm run build
 # ── Production image ──────────────────────────────────────────────────────────
 FROM node:20-alpine AS production
 WORKDIR /app
+
+# Install OpenSSL 3 — required by the Prisma linux-musl-openssl-3.0.x engine binary
+RUN apk add --no-cache openssl
 
 COPY --from=base /app/dist ./dist
 COPY --from=base /app/node_modules ./node_modules
