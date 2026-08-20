@@ -62,6 +62,17 @@ export async function placeBid(input: PlaceBidInput): Promise<PlaceBidResult> {
           ? l.currentHighestBid + MIN_INCREMENT_PAISE
           : startingPrice;
 
+// Max 32-bit signed integer for PostgreSQL INT4 column (2,147,483,647 paise = ~₹2.14 Crore)
+const MAX_BID_PAISE = 2147483647;
+
+      if (amount > MAX_BID_PAISE) {
+        return {
+          success: false,
+          error: `Bid exceeds maximum allowed limit of ₹${(MAX_BID_PAISE / 100).toLocaleString("en-IN")}`,
+          currentHighestBid: l.currentHighestBid ?? undefined,
+        };
+      }
+
       if (amount < minimumBid) {
         return {
           success: false,

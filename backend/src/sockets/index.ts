@@ -116,6 +116,13 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
       bidId: result.bidId,
     });
 
+    // Also broadcast globally so Home page listing cards update in real-time
+    io.emit("home_bid_update", {
+      listingId,
+      newHighestBid: result.currentHighestBid,
+      bidderName: result.currentHighestBidderName,
+    });
+
     console.log(
       `💰 Bid accepted: ₹${(result.currentHighestBid! / 100).toFixed(2)} by ${displayName} on listing:${listingId}`
     );

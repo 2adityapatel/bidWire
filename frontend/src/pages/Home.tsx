@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-
 import { ListingCard } from "../components/ListingCard";
 import type { Listing } from "../hooks/useListing";
+import { getSocket } from "../lib/socket";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
@@ -28,7 +28,34 @@ export function Home({ displayName }: HomeProps) {
         setError(err.message);
         setLoading(false);
       });
-  }, []);
+
+    // Real-time listener for home page feed updates across all backend instances
+    const socket = getSocket(displayName);
+
+    const handleHomeBidUpdate = (data: {
+      listingId: string;
+      newHighestBid: number;
+      bidderName: string | null;
+    }) => {
+      setListings((prevListings) =>
+        prevListings.map((listing) =>
+          listing.id === data.listingId
+            ? {
+                ...listing,
+                currentHighestBid: data.newHighestBid,
+                currentHighestBidderName: data.bidderName,
+              }
+            : listing
+        )
+      );
+    };
+
+    socket.on("home_bid_update", handleHomeBidUpdate);
+
+    return () => {
+      socket.off("home_bid_update", handleHomeBidUpdate);
+    };
+  }, [displayName]);
 
   return (
     <div className="page home-page">
