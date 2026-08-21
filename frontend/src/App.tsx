@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useSocket } from "./hooks/useSocket";
 import { Home } from "./pages/Home";
 import { AuctionRoom } from "./pages/AuctionRoom";
+import { InstanceBadge } from "./components/InstanceBadge";
 import "./index.css";
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
@@ -46,13 +47,17 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
 }
 
 function AppInner({ displayName }: { displayName: string }) {
-  const { status } = useSocket(displayName);
+  const { status, instanceId } = useSocket(displayName);
 
   return (
     <>
-      {status !== "connected" && (
+      {/* Instance badge always visible — shows which backend node this client hit */}
+      <div className="instance-banner">
+        <InstanceBadge instanceId={instanceId} status={status} />
+      </div>
+      {status === "disconnected" && (
         <div className="connection-banner">
-          {status === "connecting" ? "Connecting to auction server..." : "⚠️ Disconnected — reconnecting..."}
+          ⚠️ Disconnected — reconnecting...
         </div>
       )}
       <BrowserRouter>

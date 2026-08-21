@@ -31,8 +31,12 @@ async function getPresenceCount(listingId: string): Promise<number> {
 
 export function registerSocketHandlers(io: Server, socket: Socket) {
   const displayName = (socket.handshake.auth?.displayName as string) || "Anonymous";
+  const instanceId = process.env.INSTANCE_ID || "backend-1";
 
-  console.log(`🔌 Socket connected: ${socket.id} (${displayName})`);
+  console.log(`🔌 Socket connected: ${socket.id} (${displayName}) on ${instanceId}`);
+
+  // Immediately tell the client which backend instance it connected to
+  socket.emit("welcome", { instanceId });
 
   // ── join_listing ──────────────────────────────────────────────────────────
   socket.on("join_listing", async (payload: JoinListingPayload) => {

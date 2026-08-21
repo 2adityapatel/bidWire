@@ -7,6 +7,7 @@ type ConnectionStatus = "connecting" | "connected" | "disconnected";
 export function useSocket(displayName: string) {
   const socketRef = useRef<Socket | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
+  const [instanceId, setInstanceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!displayName) return;
@@ -15,12 +16,21 @@ export function useSocket(displayName: string) {
     socketRef.current = socket;
 
     const onConnect = () => setStatus("connected");
-    const onDisconnect = () => setStatus("disconnected");
+    const onDisconnect = () => {
+      setStatus("disconnected");
+      setInstanceId(null);
+    };
     const onConnectError = () => setStatus("disconnected");
+
+    // Backend emits 'welcome' immediately on socket connection with its instanceId
+    const onWelcome = (data: { instanceId: string }) => {
+      setInstanceId(data.instanceId);
+    };
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
+    socket.on("welcome", onWelcome);
 
     setStatus("connecting");
     socket.connect();
@@ -29,8 +39,9 @@ export function useSocket(displayName: string) {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
+      socket.off("welcome", onWelcome);
     };
   }, [displayName]);
 
-  return { socket: socketRef.current, status };
+  return { socket: socketRef.current, status, instanceId };
 }

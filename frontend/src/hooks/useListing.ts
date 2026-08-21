@@ -64,9 +64,20 @@ export function useListing(listingId: string, displayName: string) {
     const socket = getSocket(displayName);
     socketRef.current = socket;
 
+    const joinRoom = () => {
+      socket.emit("join_listing", { listingId, displayName });
+    };
+
     const handleListingState = (data: { listing: ListingWithBids }) => {
       setListing(data.listing);
-      setIsClosed(data.listing.status === "closed");
+      const closed = data.listing.status === "closed";
+      setIsClosed(closed);
+      if (closed && data.listing.currentHighestBidderName) {
+        setWinner({
+          name: data.listing.currentHighestBidderName,
+          amount: data.listing.currentHighestBid,
+        });
+      }
       setLoading(false);
     };
 
@@ -108,17 +119,21 @@ export function useListing(listingId: string, displayName: string) {
       setBidError(data.error);
     };
 
+    socket.on("connect", joinRoom);
     socket.on("listing_state", handleListingState);
     socket.on("bid_update", handleBidUpdate);
     socket.on("listing_closed", handleListingClosed);
     socket.on("presence_update", handlePresenceUpdate);
     socket.on("bid_rejected", handleBidRejected);
 
-    // Join this listing room — triggers listing_state response
-    socket.emit("join_listing", { listingId, displayName });
+    // If socket is already connected when hook mounts, join room immediately
+    if (socket.connected) {
+      joinRoom();
+    }
 
     return () => {
       socket.emit("leave_listing", { listingId });
+      socket.off("connect", joinRoom);
       socket.off("listing_state", handleListingState);
       socket.off("bid_update", handleBidUpdate);
       socket.off("listing_closed", handleListingClosed);
