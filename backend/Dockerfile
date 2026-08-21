@@ -27,4 +27,4 @@ COPY --from=base /app/prisma ./prisma
 COPY package.json ./
 
 EXPOSE 3001
-CMD ["node", "dist/index.js"]
+CMD ["npm", "start"]
