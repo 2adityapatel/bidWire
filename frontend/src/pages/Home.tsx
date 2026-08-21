@@ -15,19 +15,23 @@ export function Home({ displayName }: HomeProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/listings`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch listings");
-        return res.json();
-      })
-      .then((data) => {
-        setListings(data.listings);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
+    const fetchListings = () => {
+      fetch(`${BACKEND_URL}/api/listings`)
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch listings");
+          return res.json();
+        })
+        .then((data) => {
+          setListings(data.listings);
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError(err.message);
+          setLoading(false);
+        });
+    };
+
+    fetchListings();
 
     // Real-time listener for home page feed updates across all backend instances
     const socket = getSocket(displayName);
@@ -50,9 +54,11 @@ export function Home({ displayName }: HomeProps) {
       );
     };
 
+    socket.on("connect", fetchListings);
     socket.on("home_bid_update", handleHomeBidUpdate);
 
     return () => {
+      socket.off("connect", fetchListings);
       socket.off("home_bid_update", handleHomeBidUpdate);
     };
   }, [displayName]);

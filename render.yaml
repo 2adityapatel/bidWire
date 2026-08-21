@@ -1,0 +1,45 @@
+# Render Blueprint for BidWire Backend (Dual-Instance Multi-Node Deployment)
+# Learn more: https://render.com/docs/blueprint-spec
+
+services:
+  # ── Instance 1 ──────────────────────────────────────────────────────────────
+  - type: web
+    name: bidwire-backend-1
+    runtime: docker
+    dockerContext: backend
+    dockerfilePath: backend/Dockerfile
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Set in Render dashboard (Supabase Postgres URI)
+      - key: REDIS_URL
+        sync: false # Set in Render dashboard (Upstash TLS Redis URI: rediss://...)
+      - key: CORS_ORIGIN
+        sync: false # Set in Render dashboard (Vercel / Netlify Frontend URL)
+
+  # ── Instance 2 ──────────────────────────────────────────────────────────────
+  - type: web
+    name: bidwire-backend-2
+    runtime: docker
+    dockerContext: backend
+    dockerfilePath: backend/Dockerfile
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 3002
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Set in Render dashboard (Supabase Postgres URI)
+      - key: REDIS_URL
+        sync: false # Set in Render dashboard (Upstash TLS Redis URI: rediss://...)
+      - key: CORS_ORIGIN
+        sync: false # Set in Render dashboard (Vercel / Netlify Frontend URL)
