@@ -14,6 +14,8 @@ services:
     envVars:
       - key: PORT
         value: 3001
+      - key: INSTANCE_ID
+        value: backend-1
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
@@ -35,6 +37,8 @@ services:
     envVars:
       - key: PORT
         value: 3002
+      - key: INSTANCE_ID
+        value: backend-2
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
