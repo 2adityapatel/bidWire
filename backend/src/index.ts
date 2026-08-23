@@ -10,6 +10,9 @@ import { registerSocketHandlers } from "./sockets/index.js";
 import { startAuctionTimer } from "./services/auctionTimer.js";
 import { pubClient, subClient, redisClient } from "./redis/redis.js";
 
+import { seedListingsIfEmpty } from "./services/seedService.js";
+import { createCronRouter } from "./routes/cron.js";
+
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
 
@@ -54,12 +57,18 @@ io.on("connection", (socket) => {
   registerSocketHandlers(io, socket);
 });
 
+// Cron route (needs io for socket broadcasts — registered after io is created)
+app.use("/api/cron", createCronRouter(io));
+
 // ── Start server ─────────────────────────────────────────────────────────────
 async function main() {
   try {
     // Verify DB connection
     await prisma.$connect();
     console.log("✅ Database connected");
+
+    // Auto-seed initial listings if table is empty
+    await seedListingsIfEmpty();
 
     // Wait for Redis to be ready before accepting socket connections
     await Promise.all([

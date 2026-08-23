@@ -33,7 +33,6 @@ export function Home({ displayName }: HomeProps) {
 
     fetchListings();
 
-    // Real-time listener for home page feed updates across all backend instances
     const socket = getSocket(displayName);
 
     const handleHomeBidUpdate = (data: {
@@ -54,14 +53,24 @@ export function Home({ displayName }: HomeProps) {
       );
     };
 
+    // Re-fetch when a new auction cycle starts (new_listings broadcast from cron)
+    const handleNewListings = () => {
+      fetchListings();
+    };
+
     socket.on("connect", fetchListings);
     socket.on("home_bid_update", handleHomeBidUpdate);
+    socket.on("new_listings", handleNewListings);
 
     return () => {
       socket.off("connect", fetchListings);
       socket.off("home_bid_update", handleHomeBidUpdate);
+      socket.off("new_listings", handleNewListings);
     };
   }, [displayName]);
+
+  const activeListings = listings.filter((l) => l.status === "active");
+  const closedListings = listings.filter((l) => l.status === "closed");
 
   return (
     <div className="page home-page">
@@ -81,9 +90,10 @@ export function Home({ displayName }: HomeProps) {
       </header>
 
       <main className="home-main">
+        {/* ── Active Auctions Section ────────────────────────────────────────────── */}
         <div className="section-header">
           <h2 className="section-title">Active Auctions</h2>
-          <span className="section-count">{listings.length} live</span>
+          <span className="section-count">{activeListings.length} live</span>
         </div>
 
         {loading && (
@@ -97,23 +107,40 @@ export function Home({ displayName }: HomeProps) {
         {error && (
           <div className="error-box">
             <p>⚠️ {error}</p>
-            <p>Make sure the backend is running on port 3001.</p>
+            <p>Make sure the backend is running.</p>
           </div>
         )}
 
-        {!loading && !error && listings.length === 0 && (
+        {!loading && !error && activeListings.length === 0 && (
           <div className="empty-state">
             <p>No active auctions right now.</p>
-            <p>Run <code>npm run db:seed</code> in the backend to seed listings.</p>
+            <p>⏰ Next auction cycle starts at the top of the hour!</p>
           </div>
         )}
 
-        {!loading && !error && (
+        {!loading && !error && activeListings.length > 0 && (
           <div className="listings-grid">
-            {listings.map((listing) => (
+            {activeListings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
           </div>
+        )}
+
+        {/* ── Recent Winners & Ended Results Section ───────────────────────────── */}
+        {!loading && !error && closedListings.length > 0 && (
+          <section className="results-section" style={{ marginTop: "3rem" }}>
+            <div className="section-header">
+              <h2 className="section-title">🏆 Recent Winners & Results</h2>
+              <span className="section-count section-count--closed">
+                {closedListings.length} ended
+              </span>
+            </div>
+            <div className="listings-grid">
+              {closedListings.map((listing) => (
+                <ListingCard key={listing.id} listing={listing} />
+              ))}
+            </div>
+          </section>
         )}
       </main>
     </div>
