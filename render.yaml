@@ -23,7 +23,9 @@ services:
       - key: REDIS_URL
         sync: false # Set in Render dashboard (Upstash TLS Redis URI: rediss://...)
       - key: CORS_ORIGIN
-        sync: false # Set in Render dashboard (Vercel / Netlify Frontend URL)
+        sync: false
+      - key: CRON_SECRET
+        sync: false # Generate with: openssl rand -hex 16. Set same value in QStash header.
 
   # ── Instance 2 ──────────────────────────────────────────────────────────────
   - type: web
@@ -46,4 +48,6 @@ services:
       - key: REDIS_URL
         sync: false # Set in Render dashboard (Upstash TLS Redis URI: rediss://...)
       - key: CORS_ORIGIN
-        sync: false # Set in Render dashboard (Vercel / Netlify Frontend URL)
+        sync: false
+      - key: CRON_SECRET
+        sync: false # Same secret as backend-1 — both must match the QStash header.

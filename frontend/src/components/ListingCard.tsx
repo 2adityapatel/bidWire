@@ -15,7 +15,11 @@ export function ListingCard({ listing }: ListingCardProps) {
   const isClosed = listing.status === "closed";
 
   return (
-    <Link to={`/listing/${listing.id}`} className="listing-card" id={`listing-card-${listing.id}`}>
+    <Link
+      to={`/listing/${listing.id}`}
+      className={`listing-card ${isClosed ? "listing-card--closed" : ""}`}
+      id={`listing-card-${listing.id}`}
+    >
       <div className="listing-card__header">
         <h2 className="listing-card__title">{listing.title}</h2>
         <Countdown endsAt={listing.endsAt} isClosed={isClosed} />
@@ -23,17 +27,39 @@ export function ListingCard({ listing }: ListingCardProps) {
 
       <p className="listing-card__description">{listing.description}</p>
 
+      {/* Winner result banner for closed listings */}
+      {isClosed && (
+        <div className="listing-card__result">
+          <span className="listing-card__result-trophy">🏆</span>
+          <div>
+            <p className="listing-card__result-label">Auction Ended</p>
+            {listing.currentHighestBidderName ? (
+              <p className="listing-card__result-winner">
+                Won by <strong>{listing.currentHighestBidderName}</strong> at{" "}
+                <strong>{formatINR(listing.currentHighestBid)}</strong>
+              </p>
+            ) : (
+              <p className="listing-card__result-winner">No bids placed</p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="listing-card__footer">
         <div className="listing-card__bid-info">
           <span className="listing-card__label">
-            {listing.currentHighestBid !== null ? "Highest Bid" : "Starting at"}
+            {isClosed
+              ? "Final Price"
+              : listing.currentHighestBid !== null
+              ? "Highest Bid"
+              : "Starting at"}
           </span>
           <span className="listing-card__amount">
             {listing.currentHighestBid !== null
               ? formatINR(listing.currentHighestBid)
               : formatINR(listing.startingPrice)}
           </span>
-          {listing.currentHighestBidderName && (
+          {!isClosed && listing.currentHighestBidderName && (
             <span className="listing-card__bidder">
               by {listing.currentHighestBidderName}
             </span>
@@ -41,7 +67,7 @@ export function ListingCard({ listing }: ListingCardProps) {
         </div>
 
         <span className={`listing-card__status listing-card__status--${listing.status}`}>
-          {isClosed ? "Closed" : "Live"}
+          {isClosed ? "🏁 Ended" : "🔴 Live"}
         </span>
       </div>
     </Link>

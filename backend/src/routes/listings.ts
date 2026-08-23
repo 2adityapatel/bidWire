@@ -3,12 +3,25 @@ import { prisma } from "../db/prisma.js";
 
 export const listingsRouter = Router();
 
-// GET /api/listings — all active listings
+// GET /api/listings — active listings + recently closed (within 2h result window)
 listingsRouter.get("/", async (_req: Request, res: Response) => {
   try {
+    // Show closed listings for 4 minutes result window (testing; change to 2 * 60 * 60 * 1000 for production)
+    const twoHoursAgo = new Date(Date.now() - 4 * 60 * 1000);
+
     const listings = await prisma.listing.findMany({
-      where: { status: "active" },
-      orderBy: { endsAt: "asc" },
+      where: {
+        OR: [
+          { status: "active" },
+          // Show closed listings for up to 2 hours so users see winner results
+          { status: "closed", updatedAt: { gte: twoHoursAgo } },
+        ],
+      },
+      orderBy: [
+        // Active listings first, then closed
+        { status: "asc" },
+        { endsAt: "asc" },
+      ],
     });
     res.json({ listings });
   } catch (error) {

@@ -11,6 +11,7 @@ import { startAuctionTimer } from "./services/auctionTimer.js";
 import { pubClient, subClient, redisClient } from "./redis/redis.js";
 
 import { seedListingsIfEmpty } from "./services/seedService.js";
+import { createCronRouter } from "./routes/cron.js";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
@@ -55,6 +56,9 @@ io.adapter(createAdapter(pubClient, subClient));
 io.on("connection", (socket) => {
   registerSocketHandlers(io, socket);
 });
+
+// Cron route (needs io for socket broadcasts — registered after io is created)
+app.use("/api/cron", createCronRouter(io));
 
 // ── Start server ─────────────────────────────────────────────────────────────
 async function main() {

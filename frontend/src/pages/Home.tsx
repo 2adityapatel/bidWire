@@ -33,7 +33,6 @@ export function Home({ displayName }: HomeProps) {
 
     fetchListings();
 
-    // Real-time listener for home page feed updates across all backend instances
     const socket = getSocket(displayName);
 
     const handleHomeBidUpdate = (data: {
@@ -54,14 +53,24 @@ export function Home({ displayName }: HomeProps) {
       );
     };
 
+    // Re-fetch when a new auction cycle starts (new_listings broadcast from cron)
+    const handleNewListings = () => {
+      fetchListings();
+    };
+
     socket.on("connect", fetchListings);
     socket.on("home_bid_update", handleHomeBidUpdate);
+    socket.on("new_listings", handleNewListings);
 
     return () => {
       socket.off("connect", fetchListings);
       socket.off("home_bid_update", handleHomeBidUpdate);
+      socket.off("new_listings", handleNewListings);
     };
   }, [displayName]);
+
+  const activeCount = listings.filter((l) => l.status === "active").length;
+  const hasAny = listings.length > 0;
 
   return (
     <div className="page home-page">
@@ -83,7 +92,7 @@ export function Home({ displayName }: HomeProps) {
       <main className="home-main">
         <div className="section-header">
           <h2 className="section-title">Active Auctions</h2>
-          <span className="section-count">{listings.length} live</span>
+          <span className="section-count">{activeCount} live</span>
         </div>
 
         {loading && (
@@ -97,18 +106,18 @@ export function Home({ displayName }: HomeProps) {
         {error && (
           <div className="error-box">
             <p>⚠️ {error}</p>
-            <p>Make sure the backend is running on port 3001.</p>
+            <p>Make sure the backend is running.</p>
           </div>
         )}
 
-        {!loading && !error && listings.length === 0 && (
+        {!loading && !error && !hasAny && (
           <div className="empty-state">
             <p>No active auctions right now.</p>
-            <p>Run <code>npm run db:seed</code> in the backend to seed listings.</p>
+            <p>⏰ Next auction cycle starts at the top of the hour!</p>
           </div>
         )}
 
-        {!loading && !error && (
+        {!loading && !error && hasAny && (
           <div className="listings-grid">
             {listings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
