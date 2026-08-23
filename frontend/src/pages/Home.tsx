@@ -69,8 +69,8 @@ export function Home({ displayName }: HomeProps) {
     };
   }, [displayName]);
 
-  const activeCount = listings.filter((l) => l.status === "active").length;
-  const hasAny = listings.length > 0;
+  const activeListings = listings.filter((l) => l.status === "active");
+  const closedListings = listings.filter((l) => l.status === "closed");
 
   return (
     <div className="page home-page">
@@ -90,9 +90,10 @@ export function Home({ displayName }: HomeProps) {
       </header>
 
       <main className="home-main">
+        {/* ── Active Auctions Section ────────────────────────────────────────────── */}
         <div className="section-header">
           <h2 className="section-title">Active Auctions</h2>
-          <span className="section-count">{activeCount} live</span>
+          <span className="section-count">{activeListings.length} live</span>
         </div>
 
         {loading && (
@@ -110,19 +111,36 @@ export function Home({ displayName }: HomeProps) {
           </div>
         )}
 
-        {!loading && !error && !hasAny && (
+        {!loading && !error && activeListings.length === 0 && (
           <div className="empty-state">
             <p>No active auctions right now.</p>
             <p>⏰ Next auction cycle starts at the top of the hour!</p>
           </div>
         )}
 
-        {!loading && !error && hasAny && (
+        {!loading && !error && activeListings.length > 0 && (
           <div className="listings-grid">
-            {listings.map((listing) => (
+            {activeListings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
           </div>
+        )}
+
+        {/* ── Recent Winners & Ended Results Section ───────────────────────────── */}
+        {!loading && !error && closedListings.length > 0 && (
+          <section className="results-section" style={{ marginTop: "3rem" }}>
+            <div className="section-header">
+              <h2 className="section-title">🏆 Recent Winners & Results</h2>
+              <span className="section-count section-count--closed">
+                {closedListings.length} ended
+              </span>
+            </div>
+            <div className="listings-grid">
+              {closedListings.map((listing) => (
+                <ListingCard key={listing.id} listing={listing} />
+              ))}
+            </div>
+          </section>
         )}
       </main>
     </div>
