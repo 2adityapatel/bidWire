@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Trophy } from "lucide-react";
 import type { Listing } from "../hooks/useListing";
 import { Countdown } from "./Countdown";
 
@@ -30,7 +31,9 @@ export function ListingCard({ listing }: ListingCardProps) {
       {/* Winner result banner for closed listings */}
       {isClosed && (
         <div className="listing-card__result">
-          <span className="listing-card__result-trophy">🏆</span>
+          <span className="listing-card__result-icon">
+            <Trophy size={16} />
+          </span>
           <div>
             <p className="listing-card__result-label">Auction Ended</p>
             {listing.currentHighestBidderName ? (
@@ -67,7 +70,7 @@ export function ListingCard({ listing }: ListingCardProps) {
         </div>
 
         <span className={`listing-card__status listing-card__status--${listing.status}`}>
-          {isClosed ? "🏁 Ended" : "🔴 Live"}
+          {isClosed ? "Ended" : "Live"}
         </span>
       </div>
     </Link>
