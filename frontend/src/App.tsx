@@ -51,12 +51,27 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   );
 }
 
-function AppInner({ displayName }: { displayName: string }) {
-  const { status, instanceId } = useSocket(displayName);
+function MainApp({ displayName }: { displayName: string }) {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home displayName={displayName} />} />
+        <Route
+          path="/listing/:id"
+          element={<AuctionRoom displayName={displayName} />}
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default function App() {
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const { status, instanceId } = useSocket(displayName || "Guest");
 
   return (
-    <>
-      {/* Top banner: Left side Case Study link, Right side Instance badge */}
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Top Banner — Persistent across ALL screens including JoinScreen */}
       <div className="instance-banner">
         <a
           href={LANDING_URL}
@@ -74,25 +89,13 @@ function AppInner({ displayName }: { displayName: string }) {
           <AlertCircle size={14} /> Disconnected — reconnecting to backend cluster...
         </div>
       )}
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home displayName={displayName} />} />
-          <Route
-            path="/listing/:id"
-            element={<AuctionRoom displayName={displayName} />}
-          />
-        </Routes>
-      </BrowserRouter>
-    </>
+
+      {/* Page Content */}
+      {!displayName ? (
+        <JoinScreen onJoin={setDisplayName} />
+      ) : (
+        <MainApp displayName={displayName} />
+      )}
+    </div>
   );
-}
-
-export default function App() {
-  const [displayName, setDisplayName] = useState<string | null>(null);
-
-  if (!displayName) {
-    return <JoinScreen onJoin={setDisplayName} />;
-  }
-
-  return <AppInner displayName={displayName} />;
 }
