@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Clock } from "lucide-react";
 
 interface CountdownProps {
   endsAt: string;
@@ -44,7 +45,7 @@ export function Countdown({ endsAt, isClosed }: CountdownProps) {
 
   return (
     <span className={`countdown ${isUrgent ? "countdown--urgent" : ""}`}>
-      ⏱ {timeLeft}
+      <Clock size={12} /> {timeLeft}
     </span>
   );
 }

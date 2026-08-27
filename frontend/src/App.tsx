@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Zap, AlertCircle, BookOpen } from "lucide-react";
 import { useSocket } from "./hooks/useSocket";
 import { Home } from "./pages/Home";
 import { AuctionRoom } from "./pages/AuctionRoom";
 import { InstanceBadge } from "./components/InstanceBadge";
 import "./index.css";
+
+const LANDING_URL = import.meta.env.VITE_LANDING_URL || "https://bidwire-landing.vercel.app";
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState("");
@@ -12,9 +15,11 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   return (
     <div className="join-screen">
       <div className="join-card">
-        <div className="join-card__logo">⚡</div>
+        <div className="join-card__logo">
+          <Zap size={24} />
+        </div>
         <h1 className="join-card__title">BidWire</h1>
-        <p className="join-card__subtitle">Real-time live auctions</p>
+        <p className="join-card__subtitle">Distributed Live Auctions</p>
         <form
           className="join-card__form"
           onSubmit={(e) => {
@@ -51,13 +56,22 @@ function AppInner({ displayName }: { displayName: string }) {
 
   return (
     <>
-      {/* Instance badge always visible — shows which backend node this client hit */}
+      {/* Top banner: Left side Case Study link, Right side Instance badge */}
       <div className="instance-banner">
+        <a
+          href={LANDING_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="instance-banner__case-study"
+        >
+          <BookOpen size={12} /> System Case Study & Architecture ↗
+        </a>
         <InstanceBadge instanceId={instanceId} status={status} />
       </div>
+
       {status === "disconnected" && (
         <div className="connection-banner">
-          ⚠️ Disconnected — reconnecting...
+          <AlertCircle size={14} /> Disconnected — reconnecting to backend cluster...
         </div>
       )}
       <BrowserRouter>

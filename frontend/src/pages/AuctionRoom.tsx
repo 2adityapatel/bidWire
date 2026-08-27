@@ -1,4 +1,5 @@
 import { useParams, Link } from "react-router-dom";
+import { ArrowLeft, Trophy } from "lucide-react";
 import { useListing } from "../hooks/useListing";
 import { BidForm } from "../components/BidForm";
 import { PresenceBadge } from "../components/PresenceBadge";
@@ -28,8 +29,7 @@ export function AuctionRoom({ displayName }: AuctionRoomProps) {
   if (loading) {
     return (
       <div className="page auction-page">
-        <div className="auction-loading">
-          <div className="spinner" />
+        <div className="empty-state">
           <p>Joining auction room...</p>
         </div>
       </div>
@@ -41,7 +41,9 @@ export function AuctionRoom({ displayName }: AuctionRoomProps) {
       <div className="page auction-page">
         <div className="error-box">
           <p>Listing not found.</p>
-          <Link to="/" className="back-link">← Back to auctions</Link>
+          <Link to="/" className="back-link" style={{ marginTop: "0.5rem" }}>
+            <ArrowLeft size={14} /> Back to auctions
+          </Link>
         </div>
       </div>
     );
@@ -51,7 +53,7 @@ export function AuctionRoom({ displayName }: AuctionRoomProps) {
     <div className="page auction-page">
       <header className="auction-header">
         <Link to="/" className="back-link" id="back-to-home">
-          ← All Auctions
+          <ArrowLeft size={14} /> All Auctions
         </Link>
         <div className="auction-header__presence">
           <PresenceBadge count={presenceCount} />
@@ -103,9 +105,11 @@ export function AuctionRoom({ displayName }: AuctionRoomProps) {
         {/* Winner banner */}
         {isClosed && winner && (
           <div className="winner-banner" id="winner-banner">
-            <span className="winner-banner__trophy">🏆</span>
+            <span className="winner-banner__icon">
+              <Trophy size={22} />
+            </span>
             <div>
-              <p className="winner-banner__title">Auction Ended!</p>
+              <p className="winner-banner__title">Auction Ended</p>
               <p className="winner-banner__detail">
                 Won by <strong>{winner.name ?? "Anonymous"}</strong> with a bid of{" "}
                 <strong>{formatINR(winner.amount)}</strong>

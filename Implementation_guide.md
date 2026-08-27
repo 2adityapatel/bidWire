@@ -1,144 +1,143 @@
-# Real-Time Live Auction — Implementation Guide
+# ⚡ BidWire — Comprehensive Implementation & Architecture Guide
 
-## Project name (pick one)
+## 1. Project Overview & Scope
 
-| Name | Why it works |
-|---|---|
-| **BidWire** | Sounds like real infrastructure (a "wire" carrying live price updates), not a toy project |
-| **AuctionPulse** | "Pulse" signals real-time/heartbeat — good if you want the README to lead with the sync problem |
-| **GavelSync** | Most literal about what the project proves (sync across instances), good if you want the title itself to hint at the engineering story |
+**BidWire** is a high-concurrency, multi-instance real-time auction engine built to demonstrate production-grade distributed system engineering patterns:
 
-Recommendation: **BidWire** — short, sounds like a product a company would actually run, doesn't oversell it as a game.
-
----
-
-## 1. Scope (final — don't add beyond this)
-
-- Users pick a display name (no password) to "join" — stored in a short-lived session/cookie, not a real account
-- A small number of active auction listings (seed 3–5 manually, no admin CRUD needed)
-- Anyone can place a bid on an active listing
-- Server is the only authority on the current highest bid — a bid is only accepted if it's higher than the current highest, checked atomically
-- All connected clients viewing a listing see the new highest bid instantly, regardless of which backend instance they're connected to
-- Each listing has a countdown timer; when it hits zero, the server (not the client) decides the listing is closed and broadcasts the winner
-- Basic presence: show how many users are currently viewing a listing
-- Reconnect handling: if a client's socket drops and reconnects, it re-syncs to the current state instead of showing stale data
-
-Explicitly NOT in scope: payments, image uploads, admin panel, real user accounts, multiple auction categories, bid history pagination beyond the last few bids.
+- **Ephemeral Sessions:** Users enter a display name (stored in React state & Socket.IO auth handshake) to join auctions without sign-up overhead.
+- **Atomic Bid Placement:** The database server is the sole authority on current highest bids. Bid submission uses row-level locking (`SELECT ... FOR UPDATE`) in PostgreSQL transactions to guarantee zero race conditions.
+- **Cross-Node Event Fanout:** `@socket.io/redis-adapter` syncs bids, home page price feeds, and timer events across multiple backend instances via Redis Pub/Sub in real time.
+- **Distributed Timer Locks & Expiration:** Distributed Redis spinlocks (`SET NX EX`) ensure only one backend instance executes auction expiration and cycle rotation.
+- **Synchronized Presence:** Active viewer counts are tracked using Redis Sets (`SADD`, `SREM`, `SCARD`) across all server nodes in $O(1)$ time.
+- **Automated Rotating Auction Cycle:** Upstash QStash triggers an hourly serverless cron endpoint (`POST /api/cron/new-cycle`) that creates 4 new listings from a 12-item pool, deletes old closed listings, and prevents Render free-tier idle spin-down.
+- **Reconnect State Recovery:** Dropped WebSocket connections automatically re-subscribe on reconnect and fetch fresh state directly from PostgreSQL.
+- **Visual Multi-Node Routing:** Multi-instance query parameter routing (`?server=2`) and a live UI `<InstanceBadge>` (`⚡ backend-1 Node 1` vs `⚡ backend-2 Node 2`) visually demonstrate distributed node handling.
 
 ---
 
-## 2. Tech stack (as decided)
+## 2. Technology Stack
 
-- **Backend:** Node.js + Express, TypeScript
-- **Real-time:** Socket.io (server + client), `@socket.io/redis-adapter` — actually, since you're on Express not NestJS, you're wiring `@socket.io/redis-adapter` directly rather than through a framework decorator. This is the part where you write the pub/sub logic yourself.
-- **Redis client:** `ioredis`
-- **Redis hosting:** Upstash (free tier, TCP-compatible so pub/sub works)
-- **Database:** PostgreSQL + Prisma
-- **DB hosting:** local Docker Postgres for dev → Supabase free tier for the deployed/demo version
-- **Frontend:** React + `socket.io-client`
-- **Local multi-instance simulation:** Docker Compose (two backend services on different ports + Postgres, all pointing at the same Upstash Redis)
-- **Live deployment:** two separate Render free web services (same repo, two deploys) — sidesteps Render's free tier not supporting multi-instance scaling on one service
+- **Backend:** Node.js, Express, TypeScript, Prisma ORM
+- **Database & Pooling:** PostgreSQL (Atomic row locking via `SELECT FOR UPDATE`, PgBouncer transaction pooling with `?pgbouncer=true`)
+- **Real-Time & Distributed Cache:** Socket.IO, `@socket.io/redis-adapter`, Redis (`ioredis`)
+- **Frontend:** React 19, TypeScript, Vite, React Router v7, Custom CSS Design System
+- **Automation & Serverless Cron:** Upstash QStash (HTTP-based scheduled cron runner & Render anti-sleep trigger)
+- **Deployment & Cloud:** Docker Compose (Local dual-node simulation), Render (Dual Web Services), Supabase (PostgreSQL), Upstash (Serverless Redis), Vercel (Frontend SPA)
 
 ---
 
-## 3. Data model
+## 3. Data Model & Database Schema
 
-```
-User (ephemeral — not a real table, just session data)
-  - id (uuid, generated on "join")
-  - displayName (string, user-entered)
+```prisma
+enum ListingStatus {
+  active
+  closed
+}
 
-Listing
-  - id (uuid)
-  - title (string)
-  - description (string)
-  - startingPrice (int, cents)
-  - currentHighestBid (int, cents, nullable)
-  - currentHighestBidderName (string, nullable)
-  - endsAt (timestamp)
-  - status (enum: active | closed)
+model Listing {
+  id                       String        @id @default(uuid())
+  title                    String
+  description              String
+  startingPrice            Int           // in paise (1 INR = 100 paise)
+  currentHighestBid        Int?          // in paise, null if no bids yet
+  currentHighestBidderName String?
+  endsAt                   DateTime
+  status                   ListingStatus @default(active)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
 
-Bid
-  - id (uuid)
-  - listingId (fk -> Listing)
-  - bidderName (string)
-  - amount (int, cents)
-  - createdAt (timestamp)
+  bids                     Bid[]
+
+  @@map("listings")
+}
+
+model Bid {
+  id          String   @id @default(uuid())
+  listingId   String
+  bidderName  String
+  amount      Int      // in paise
+  createdAt   DateTime @default(now())
+
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("bids")
+}
 ```
 
-Bids are append-only — never update or delete a Bid row. `Listing.currentHighestBid` is a denormalized cache of the max, updated transactionally when a valid bid lands.
+*Note: Bids are append-only. `Listing.currentHighestBid` and `Listing.currentHighestBidderName` are denormalized caches updated inside atomic transactions.*
 
 ---
 
-## 4. The core mechanism — bid placement flow
+## 4. Completed Implementation Phases
 
-This is the part your README needs to explain clearly, since it's the whole point of the project.
+### Phase 1: Core Single-Instance Engine
+- Express + TypeScript backend initialized with Prisma ORM and PostgreSQL.
+- REST API routes (`GET /api/listings`, `GET /api/listings/:id`).
+- Atomic bid placement engine in `bidService.ts` executing `SELECT * FROM listings WHERE id = $1 FOR UPDATE` within Prisma transactions.
+- 32-bit signed integer cap validation (`2,147,483,647` paise / ~₹2.14 Crore) preventing database overflow exceptions.
+- React 19 + Vite frontend with auction room, bid submission form, and live countdown timer components.
 
-1. Client emits a `place_bid` socket event: `{ listingId, amount }`
-2. The receiving server instance:
-   a. Runs a DB transaction: lock the listing row (`SELECT ... FOR UPDATE`), check `amount > currentHighestBid`, and if valid, insert the Bid row and update `Listing.currentHighestBid` + `currentHighestBidderName`
-   b. If invalid (someone else's bid already landed higher in the meantime), reject and tell only that client "bid too low, current highest is X"
-   c. If valid, **publish** an event to a Redis channel named `listing:{listingId}`, containing the new highest bid
-3. Every backend instance is **subscribed** to Redis channels for listings that have at least one client currently watching them
-4. Each instance, on receiving the published event, emits a `bid_update` socket event to every one of its own locally-connected clients who are viewing that listing
-5. Client UI updates the highest-bid display without a page refresh, no matter which backend instance it happens to be connected to
+### Phase 2: Redis Integration & Multi-Instance Scaling
+- `@socket.io/redis-adapter` configured with `pubClient` and `subClient` in `redis.ts` & `index.ts`.
+- Multi-node presence tracking (`SADD`, `SREM`, `SCARD`) in `sockets/index.ts`.
+- Distributed timer locking (`SET auction:close_lock:{id} 1 EX 30 NX`) in `services/auctionTimer.ts` preventing duplicate win broadcasts across backend nodes.
+- Local multi-instance simulation via `docker-compose.yml` (`backend_1` on port 3001, `backend_2` on port 3002, `redis` on 6379, `postgres` on 5433).
+- Real-time Home page price feed broadcast (`home_bid_update`).
 
-The DB transaction lock (step 2a) is what prevents two simultaneous bids on different instances from both thinking they're the highest — this is your race-condition story, on top of the cross-instance sync story.
+### Phase 3: Production Polish, Cloud Deployment & Reconnect Hardening
+- Reconnect state re-syncing: Socket `connect` listeners in `useListing.ts` and `Home.tsx` re-emit `join_listing` and re-fetch REST listings automatically.
+- Production Cloud infrastructure setup: Supabase PostgreSQL (with `?pgbouncer=true` PgBouncer compatibility) & Upstash TLS Redis (`rediss://`).
+- Dual Render backend deployment configuration via `render.yaml` (`bidwire-backend-1` and `bidwire-backend-2`).
+- Vercel SPA frontend deployment configuration via `frontend/vercel.json`.
+- Multi-instance demo client routing (`?server=2` in `lib/socket.ts`) and visual Node status badge (`InstanceBadge.tsx`).
+- Detailed technical `README.md` documenting architecture topology and engineering mechanics.
 
----
-
-## 5. Presence and reconnect
-
-- On `join_listing`, store `SADD presence:{listingId} {socketId}` in Redis with a short expiry, refreshed on a heartbeat; broadcast the updated count via the same pub/sub channel
-- On reconnect, client re-emits `join_listing`, and the server responds with the current `Listing` state pulled fresh from Postgres (not from memory) — this is what "replay what you missed" means in practice here; you don't need real event-log replay for this scope, re-fetching current state on reconnect is enough and honestly a more realistic pattern for a project this size
-
----
-
-## 6. Build order (3 weeks)
-
-**Week 1 — single instance, no Redis yet**
-- Express + Prisma + Postgres running locally, seed 3–5 listings
-- REST endpoints: list auctions, get one listing
-- Socket.io wired up on a single instance: join a listing, place a bid, broadcast to clients on that same instance
-- Get the DB-transaction bid validation correct and tested before touching Redis at all
-
-**Week 2 — add Redis, prove cross-instance sync**
-- Wire `@socket.io/redis-adapter` with Upstash
-- Docker Compose: two backend containers on different ports + Postgres, both pointing at the same Upstash Redis
-- Manual test: two browser tabs, one per port, bid from one, confirm the other updates
-- Add presence counts
-
-**Week 3 — polish, deploy, document**
-- Countdown timer + auto-close logic (a small interval job checking `endsAt`, or scheduled per-listing)
-- Reconnect re-sync
-- Deploy as two separate Render free services pointed at the same Upstash + Supabase
-- Record: max concurrent connections tested, event-propagation latency between instances, what happens on reconnect — put these numbers in the README, not just a tech-stack list
+### Phase 4: Automated Rotating Auction Cycle & QStash Integration
+- **12-Item Rotating Pool (`cycleService.ts`):** Curated pool of 12 luxury & collectible items rotating 4 items per cycle.
+- **Serverless Cron Route (`routes/cron.ts`):** `POST /api/cron/new-cycle` protected with `CRON_SECRET` header validation.
+- **Distributed Cycle Lock:** Redis `cycle:lock` (`SET NX EX 30`) ensures single execution across Render instances.
+- **Automated Garbage Collection:** Closed listings older than the result window are deleted; associated bids cascade-delete via database foreign keys.
+- **Upstash QStash Integration:** QStash sends an hourly HTTP request to `/api/cron/new-cycle`, keeping Render free-tier backend instances from sleeping.
+- **Split UI Layout:** Home page cleanly divides content into `Active Auctions` (live) and `🏆 Recent Winners & Results` (ended result window) with custom winner banners.
 
 ---
 
-## 7. Folder structure
+## 5. Folder & Codebase Structure
 
 ```
 bidwire/
-  backend/
-    src/
-      routes/          # REST endpoints (list/get listings)
-      sockets/          # socket event handlers (join, place_bid)
-      redis/            # pub/sub publish + subscribe setup
-      db/               # Prisma schema + client
-      services/         # bid validation logic (the transactional core)
-    Dockerfile
-  frontend/
-    src/
-      components/       # ListingCard, BidForm, PresenceBadge
-      hooks/             # useSocket, useListing
-  docker-compose.yml
-  README.md
+├── backend/
+│   ├── src/
+│   │   ├── db/              # Prisma DB client initialization
+│   │   ├── redis/           # ioredis pubClient, subClient & redisClient
+│   │   ├── routes/          # REST endpoints (/api/listings, /api/cron)
+│   │   ├── services/        # Atomic bid placement, timer locks, cycle rotation, auto-seed
+│   │   ├── sockets/         # Socket.IO event registration & presence tracking
+│   │   └── index.ts         # Express server, Socket.IO adapter & app entry point
+│   ├── prisma/              # Prisma schema & seed script
+│   ├── package.json         # Scripts & dependencies
+│   └── Dockerfile           # Multi-stage production Docker image
+├── frontend/
+│   ├── src/
+│   │   ├── components/      # ListingCard, BidForm, PresenceBadge, InstanceBadge, Countdown
+│   │   ├── hooks/           # useListing & useSocket custom React hooks
+│   │   ├── lib/             # Socket.IO client singleton & ?server=2 query router
+│   │   ├── pages/           # Home & AuctionRoom pages
+│   │   ├── App.tsx          # App root with connection state banner
+│   │   └── index.css        # Full Vanilla CSS design system
+│   ├── package.json         # Vite & React dependencies
+│   └── vercel.json          # Vercel SPA routing configuration
+├── docker-compose.yml       # Local multi-instance cluster simulation
+├── render.yaml              # Render blueprint specification for dual backends
+├── Implementation_guide.md  # Comprehensive project implementation guide
+└── README.md                # Engineering documentation & architecture breakdown
 ```
 
 ---
 
-## 8. Open questions still worth deciding before you start coding
+## 6. Verification & Health Checks
 
-- Countdown auto-close: cron-style check every few seconds across all active listings, or a per-listing scheduled timeout? (Simpler: a single interval every 2–3 seconds checking all active listings' `endsAt` against `now()`.)
-- Do you want bid amounts entered freely, or a "minimum increment" rule (e.g. must beat current bid by at least $1)? Minimum increment is a nice, cheap extra realism detail for the README if you want it — optional, not required.
+- **Backend Build:** `npm run build` in `backend/` (TypeScript `tsc` compilation).
+- **Frontend Build:** `npm run build` in `frontend/` (TypeScript `tsc -b` and Vite bundle build).
+- **Health Check Endpoint:** `GET /health` returns `{ status: "ok", timestamp: "..." }`.
+- **Cron Cycle Endpoint:** `POST /api/cron/new-cycle` with header `x-cron-secret: <CRON_SECRET>` triggers new cycle rotation.

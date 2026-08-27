@@ -1,3 +1,5 @@
+import { Users } from "lucide-react";
+
 interface PresenceBadgeProps {
   count: number;
 }
@@ -5,7 +7,7 @@ interface PresenceBadgeProps {
 export function PresenceBadge({ count }: PresenceBadgeProps) {
   return (
     <div className="presence-badge">
-      <span className="presence-dot" />
+      <Users size={12} color="var(--accent-cyan)" />
       <span>{count} {count === 1 ? "person" : "people"} watching</span>
     </div>
   );
