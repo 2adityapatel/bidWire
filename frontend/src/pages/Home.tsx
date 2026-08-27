@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { Zap, Trophy, AlertCircle, Clock, BookOpen } from "lucide-react";
+import { Zap, Trophy, AlertCircle, Clock } from "lucide-react";
 import { ListingCard } from "../components/ListingCard";
 import type { Listing } from "../hooks/useListing";
 import { getSocket } from "../lib/socket";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-const LANDING_URL = import.meta.env.VITE_LANDING_URL || "https://bidwire-landing.vercel.app";
 
 interface HomeProps {
   displayName: string;
@@ -85,15 +84,6 @@ export function Home({ displayName }: HomeProps) {
             <p className="home-header__subtitle">Live real-time auctions</p>
           </div>
           <div className="home-header__right">
-            <a
-              href={LANDING_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="instance-banner__case-study"
-              style={{ padding: "0.3rem 0.75rem", fontSize: "0.8rem" }}
-            >
-              <BookOpen size={14} /> Architecture ↗
-            </a>
             <div className="home-header__user">
               <span className="home-header__avatar">{displayName.charAt(0).toUpperCase()}</span>
               <span className="home-header__username">{displayName}</span>
