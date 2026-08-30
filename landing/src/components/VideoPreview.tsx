@@ -3,7 +3,7 @@ import { Film, Radio } from 'lucide-react';
 import { DualInstanceSimulator } from './DualInstanceSimulator';
 
 export const VideoPreview = () => {
-  const [activeTab, setActiveTab] = useState<'simulator' | 'video'>('simulator');
+  const [activeTab, setActiveTab] = useState<'simulator' | 'video'>('video');
 
   return (
     <div style={{ background: '#0e131f', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
@@ -70,7 +70,7 @@ export const VideoPreview = () => {
               loop
               muted
               playsInline
-              style={{ width: '100%', display: 'block', maxHeight: '420px', objectFit: 'cover' }}
+              style={{ width: '100%', display: 'block', maxHeight: '560px', objectFit: 'contain', background: '#070a12' }}
               onError={(e) => {
                 const target = e.currentTarget;
                 target.style.display = 'none';
